@@ -5,9 +5,8 @@
 AI agents talk to each other in plain text: no typed contracts, no input/output validation, no enforcement beyond "please follow the prompt". `agent-protocol` makes agent-to-agent calls **systemic, not prompt-based** — agents can only reach one another *through the proxy*, where every argument is checked against a contract, and workers are launched so locked-down they physically can't go anywhere else.
 
 Single Go binary · MCP over HTTP · in-memory · no database.
-
-<!-- screenshot: full live run (orchestrator → dispatch → spawned worker → result) -->
-<!-- ![live run](docs/live-run.png) -->
+<img width="1489" height="380" alt="Screenshot 2026-06-06 at 20 58 55" src="https://github.com/user-attachments/assets/bcf5e5c4-90a2-4e72-8753-770fe8ba3079" />
+<img width="1475" height="190" alt="Screenshot 2026-06-06 at 20 59 08" src="https://github.com/user-attachments/assets/f1ec70e4-de52-4027-91e6-15e0040f1f37" />
 
 ---
 
@@ -76,6 +75,8 @@ Then, in its chat:
 Have the clj-reviewer agent review internal/app/schema/schema.go and show its findings.
 ```
 The orchestrator can **only** `dispatch` → the proxy spawns a locked `clj-reviewer` worker (with just `Read/Glob/Grep`) → the worker reviews the file and `complete`s → the orchestrator gets the result via `listen`.
+<img width="1286" height="255" alt="Screenshot 2026-06-06 at 21 00 34" src="https://github.com/user-attachments/assets/e8eb066e-fb40-4388-b8ff-838b65ffa1c5" />
+<img width="1475" height="190" alt="Screenshot 2026-06-06 at 20 59 08" src="https://github.com/user-attachments/assets/1c1e1d78-5042-40d4-a367-4c666c4f53b1" />
 
 <!-- screenshot: locked orchestrator delegating + result -->
 <!-- ![live run](docs/live-run.png) -->
