@@ -1,12 +1,25 @@
-# build output / binaries
+# Binaries / build output
+/bin/
 /tmp/
 /server
 /dev
-*.test
+*.exe
 *.out
+*.test
 
-# logs
+# Go
+vendor/
+*.prof
+coverage.out
+
+# Env / secrets / local config
+.env
+*.local
+
+# Logs
 *.log
 
-# macOS
+# macOS / editors
 .DS_Store
+.idea/
+.vscode/
