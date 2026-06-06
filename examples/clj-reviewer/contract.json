@@ -1,0 +1,20 @@
+{
+  "agent_name": "clj-reviewer",
+  "allowed_tools": ["Read", "Glob", "Grep"],
+  "input_schema": {
+    "type": "object",
+    "required": ["files", "rubric"],
+    "properties": {
+      "files": {"type": "array"},
+      "rubric": {"type": "string"}
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["summary", "findings"],
+    "properties": {
+      "summary": {"type": "string"},
+      "findings": {"type": "array"}
+    }
+  }
+}

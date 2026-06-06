@@ -1,0 +1,12 @@
+# build output / binaries
+/tmp/
+/server
+/dev
+*.test
+*.out
+
+# logs
+*.log
+
+# macOS
+.DS_Store

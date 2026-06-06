@@ -1,0 +1,20 @@
+{
+  "agent_name": "clj-test-writer",
+  "allowed_tools": ["Read", "Glob", "Grep"],
+  "input_schema": {
+    "type": "object",
+    "required": ["namespace", "source_file"],
+    "properties": {
+      "namespace": {"type": "string"},
+      "source_file": {"type": "string"}
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "required": ["test_file", "test_count"],
+    "properties": {
+      "test_file": {"type": "string"},
+      "test_count": {"type": "integer"}
+    }
+  }
+}

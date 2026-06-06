@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agent-protocol": {
+      "type": "http",
+      "url": "http://localhost:4321/mcp"
+    }
+  }
+}
