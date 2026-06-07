@@ -1,0 +1,42 @@
+version: 2
+
+project_name: agent-protocol
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: agent-protocol
+    main: ./cmd/agent-protocol
+    binary: agent-protocol
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+# Push a Homebrew formula into igorrize/homebrew-tap on each release.
+brews:
+  - name: agent-protocol
+    repository:
+      owner: igorrize
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/igorrize/agent-protocol"
+    description: "Typed-contract MCP proxy for AI agents — locked, validated agent-to-agent calls"
+    install: |
+      bin.install "agent-protocol"
+    test: |
+      assert_match "usage", shell_output("#{bin}/agent-protocol 2>&1", 2)
+    caveats: |
+      `agent-protocol orchestrate` needs the `claude` CLI (Claude Code) on your PATH.
