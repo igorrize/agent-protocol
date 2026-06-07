@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"agent-protocol/internal/app/adapters/spawn/harness"
 	"agent-protocol/internal/app/ports"
 )
 
@@ -16,16 +17,18 @@ func (noopLogger) Error(string, ...any) {}
 
 // fakeHarness records its inputs and returns a preset command.
 type fakeHarness struct {
+	profile    harness.Profile
 	configPath string
 	prompt     string
-	allowed    []string
+	tools      []string
 	command    []string
 }
 
-func (h *fakeHarness) Command(configPath, prompt string, allowedTools []string) []string {
+func (h *fakeHarness) Command(profile harness.Profile, configPath, prompt string, tools []string) []string {
+	h.profile = profile
 	h.configPath = configPath
 	h.prompt = prompt
-	h.allowed = allowedTools
+	h.tools = tools
 	return h.command
 }
 
@@ -42,16 +45,71 @@ func TestSpawnWritesLockedConfigAndStarts(t *testing.T) {
 		os.Remove("/tmp/ap-worker-task_abc12345.log")
 	})
 
-	// harness received the task prompt and work tools
+	// harness invoked with the worker profile, task prompt, and work tools
+	if h.profile != harness.Worker {
+		t.Errorf("profile = %v, want Worker", h.profile)
+	}
 	if !strings.Contains(h.prompt, "task_abc12345") {
 		t.Errorf("prompt missing task id: %q", h.prompt)
 	}
-	if len(h.allowed) != 2 || h.allowed[0] != "Read" {
-		t.Errorf("allowed tools = %v", h.allowed)
+	if len(h.tools) != 2 || h.tools[0] != "Read" {
+		t.Errorf("work tools = %v", h.tools)
 	}
 
-	// locked config content: only our proxy, authed with the worker token
-	data, err := os.ReadFile(h.configPath)
+	assertLockedConfig(t, h.configPath, "Bearer tok_secret")
+}
+
+func TestSpawnEmptyCommandErrors(t *testing.T) {
+	h := &fakeHarness{command: nil}
+	s := New(h, "http://x", noopLogger{})
+	if err := s.Spawn(ports.Task{ID: "task_x"}, "tok", nil); err == nil {
+		t.Error("empty command should error")
+	}
+	t.Cleanup(func() { os.Remove("/tmp/ap-worker-task_x.log") })
+}
+
+func TestWriteLockedConfigWorkerHasToken(t *testing.T) {
+	path, err := WriteLockedConfig("http://localhost:4321/mcp", "tok_w")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(path) })
+	assertLockedConfig(t, path, "Bearer tok_w")
+}
+
+func TestWriteLockedConfigOrchestratorHasNoToken(t *testing.T) {
+	path, err := WriteLockedConfig("http://localhost:4321/mcp", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(path) })
+
+	srv := readServer(t, path)
+	if _, hasHeaders := srv["headers"]; hasHeaders {
+		t.Errorf("orchestrator config must omit Authorization header: %v", srv)
+	}
+	if srv["url"] != "http://localhost:4321/mcp" || srv["type"] != "http" {
+		t.Errorf("server config = %v", srv)
+	}
+}
+
+// assertLockedConfig verifies the file holds exactly one server (the proxy)
+// authed with wantAuth.
+func assertLockedConfig(t *testing.T, path, wantAuth string) {
+	t.Helper()
+	srv := readServer(t, path)
+	if srv["type"] != "http" {
+		t.Errorf("server type = %v", srv["type"])
+	}
+	auth := srv["headers"].(map[string]any)["Authorization"]
+	if auth != wantAuth {
+		t.Errorf("auth = %v, want %q", auth, wantAuth)
+	}
+}
+
+func readServer(t *testing.T, path string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
@@ -61,23 +119,7 @@ func TestSpawnWritesLockedConfigAndStarts(t *testing.T) {
 	}
 	servers := cfg["mcpServers"].(map[string]any)
 	if len(servers) != 1 {
-		t.Errorf("want exactly one mcp server, got %d", len(servers))
+		t.Fatalf("want exactly one mcp server, got %d", len(servers))
 	}
-	srv := servers["agent-protocol"].(map[string]any)
-	if srv["type"] != "http" || srv["url"] != "http://localhost:4321/mcp" {
-		t.Errorf("server config = %v", srv)
-	}
-	if auth := srv["headers"].(map[string]any)["Authorization"]; auth != "Bearer tok_secret" {
-		t.Errorf("auth header = %v", auth)
-	}
-}
-
-func TestSpawnEmptyCommandErrors(t *testing.T) {
-	h := &fakeHarness{command: nil}
-	s := New(h, "http://x", noopLogger{})
-	err := s.Spawn(ports.Task{ID: "task_x"}, "tok", nil)
-	if err == nil {
-		t.Error("empty command should error")
-	}
-	t.Cleanup(func() { os.Remove("/tmp/ap-worker-task_x.log") })
+	return servers["agent-protocol"].(map[string]any)
 }

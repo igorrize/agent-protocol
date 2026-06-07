@@ -2,28 +2,43 @@ package harness
 
 import "strings"
 
-// disallowedTools are native capabilities a locked worker must never have:
+// disallowedTools are native capabilities a locked agent must never have:
 // spawning subagents (Agent/Task), shell access (Bash), or native orchestration
-// (Workflow). This is defense-in-depth on top of the allowedTools whitelist —
-// the worker can only reach other agents through the proxy.
+// (Workflow). Defense-in-depth on top of --tools/--allowedTools — agents reach
+// each other only through the proxy.
 const disallowedTools = "Agent,Task,Bash,Workflow"
 
-// Claude is the Claude Code harness (the reference). It runs headless with a
-// single locked MCP config, a whitelisted tool set, and an explicit deny-list.
+// Proxy MCP tool names.
+const (
+	mcpDispatch = "mcp__agent-protocol__dispatch"
+	mcpListen   = "mcp__agent-protocol__listen"
+	mcpComplete = "mcp__agent-protocol__complete"
+	mcpAudit    = "mcp__agent-protocol__audit"
+)
+
+// Claude is the Claude Code harness (the reference). It locks an agent down to
+// a single MCP config, a built-in tool set (--tools, "" disables all), an
+// allow-list of proxy tools, and an explicit deny-list.
 type Claude struct{}
 
-// Command builds the claude argv. listen/complete are always appended to the
-// agent's own work tools; the deny-list is always applied.
-func (Claude) Command(configPath, prompt string, allowedTools []string) []string {
-	tools := append(append([]string{}, allowedTools...),
-		"mcp__agent-protocol__listen",
-		"mcp__agent-protocol__complete",
-	)
-	return []string{
-		"claude", "-p", prompt,
+// Command builds the claude argv for the profile.
+func (Claude) Command(profile Profile, configPath, prompt string, tools []string) []string {
+	argv := []string{"claude"}
+	if profile == Worker {
+		argv = append(argv, "-p", prompt) // headless; orchestrator stays interactive
+	}
+	argv = append(argv,
 		"--strict-mcp-config",
 		"--mcp-config", configPath,
-		"--allowedTools", strings.Join(tools, ","),
-		"--disallowedTools", disallowedTools,
+		"--tools", strings.Join(tools, ","), // "" => all built-in tools disabled
+	)
+
+	switch profile {
+	case Worker:
+		argv = append(argv, "--allowedTools", strings.Join([]string{mcpListen, mcpComplete}, ","))
+	case Orchestrator:
+		argv = append(argv, "--allowedTools", strings.Join([]string{mcpDispatch, mcpListen, mcpAudit}, ","))
 	}
+
+	return append(argv, "--disallowedTools", disallowedTools)
 }

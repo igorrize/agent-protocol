@@ -15,39 +15,62 @@ func argvValue(argv []string, flag string) string {
 	return ""
 }
 
-func TestClaudeCommand(t *testing.T) {
-	argv := Claude{}.Command("/tmp/cfg.json", "do the thing", []string{"Read", "Grep"})
+// hasFlag reports whether flag appears in argv.
+func hasFlag(argv []string, flag string) bool {
+	for _, a := range argv {
+		if a == flag {
+			return true
+		}
+	}
+	return false
+}
+
+func TestClaudeWorkerProfile(t *testing.T) {
+	argv := Claude{}.Command(Worker, "/tmp/cfg.json", "do the thing", []string{"Read", "Grep"})
 
 	if argv[0] != "claude" {
 		t.Fatalf("argv[0] = %q, want claude", argv[0])
 	}
-	joined := strings.Join(argv, " ")
-	for _, want := range []string{"-p", "do the thing", "--strict-mcp-config", "--mcp-config", "/tmp/cfg.json", "--allowedTools"} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("argv missing %q: %v", want, argv)
-		}
+	if !hasFlag(argv, "-p") || argvValue(argv, "-p") != "do the thing" {
+		t.Errorf("worker must run headless with -p prompt: %v", argv)
 	}
+	if argvValue(argv, "--mcp-config") != "/tmp/cfg.json" || !hasFlag(argv, "--strict-mcp-config") {
+		t.Errorf("locked mcp config missing: %v", argv)
+	}
+	if got := argvValue(argv, "--tools"); got != "Read,Grep" {
+		t.Errorf("--tools = %q, want Read,Grep", got)
+	}
+	if got := argvValue(argv, "--allowedTools"); got != "mcp__agent-protocol__listen,mcp__agent-protocol__complete" {
+		t.Errorf("--allowedTools = %q", got)
+	}
+	assertDenyList(t, argv)
+}
 
-	tools := argvValue(argv, "--allowedTools")
-	if tools != "Read,Grep,mcp__agent-protocol__listen,mcp__agent-protocol__complete" {
-		t.Errorf("allowedTools = %q", tools)
-	}
-	if strings.Contains(tools, "Task") || strings.Contains(tools, "Bash") {
-		t.Errorf("whitelist must not include Task/Bash: %q", tools)
-	}
+func TestClaudeOrchestratorProfile(t *testing.T) {
+	argv := Claude{}.Command(Orchestrator, "/tmp/cfg.json", "", nil)
 
-	// deny-list must explicitly block native subagent spawning and shell
+	if hasFlag(argv, "-p") {
+		t.Error("orchestrator must be interactive (no -p)")
+	}
+	if got := argvValue(argv, "--tools"); got != "" {
+		t.Errorf("orchestrator --tools = %q, want empty (all built-in disabled)", got)
+	}
+	allowed := argvValue(argv, "--allowedTools")
+	if allowed != "mcp__agent-protocol__dispatch,mcp__agent-protocol__listen,mcp__agent-protocol__audit" {
+		t.Errorf("--allowedTools = %q", allowed)
+	}
+	if strings.Contains(allowed, "complete") {
+		t.Errorf("orchestrator must not have complete: %q", allowed)
+	}
+	assertDenyList(t, argv)
+}
+
+func assertDenyList(t *testing.T, argv []string) {
+	t.Helper()
 	disallowed := argvValue(argv, "--disallowedTools")
 	for _, want := range []string{"Agent", "Task", "Bash", "Workflow"} {
 		if !strings.Contains(disallowed, want) {
 			t.Errorf("--disallowedTools missing %q: %q", want, disallowed)
 		}
-	}
-}
-
-func TestClaudeCommandNoWorkTools(t *testing.T) {
-	argv := Claude{}.Command("/tmp/cfg.json", "p", nil)
-	if got := argvValue(argv, "--allowedTools"); got != "mcp__agent-protocol__listen,mcp__agent-protocol__complete" {
-		t.Errorf("allowedTools = %q", got)
 	}
 }

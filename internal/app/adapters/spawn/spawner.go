@@ -1,7 +1,6 @@
 package spawn
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -22,16 +21,16 @@ func New(h harness.Harness, proxyURL string, logger ports.Logger) *Spawner {
 	return &Spawner{harness: h, proxyURL: proxyURL, log: logger}
 }
 
-// Spawn writes a locked MCP config, then starts the harness for the task with
-// stdout+stderr redirected to /tmp/ap-worker-<task>.log. Fire-and-forget: it
-// returns once the process is started.
+// Spawn writes a locked MCP config, then starts the worker harness for the task
+// with stdout+stderr redirected to /tmp/ap-worker-<task>.log. Fire-and-forget:
+// it returns once the process is started.
 func (s *Spawner) Spawn(task ports.Task, workerToken string, allowedTools []string) error {
-	cfgPath, err := s.writeLockedConfig(task.ID, workerToken)
+	cfgPath, err := WriteLockedConfig(s.proxyURL, workerToken)
 	if err != nil {
 		return fmt.Errorf("write locked config: %w", err)
 	}
 
-	argv := s.harness.Command(cfgPath, workerPrompt(task.ID), allowedTools)
+	argv := s.harness.Command(harness.Worker, cfgPath, workerPrompt(task.ID), allowedTools)
 	if len(argv) == 0 {
 		return fmt.Errorf("harness produced empty command")
 	}
@@ -58,33 +57,6 @@ func (s *Spawner) Spawn(task ports.Task, workerToken string, allowedTools []stri
 
 	s.log.Info("spawned worker", "task", task.ID, "tools", allowedTools, "log", logPath)
 	return nil
-}
-
-// writeLockedConfig writes the worker's MCP config to a temp file: ONLY our
-// proxy, authed with the worker token.
-func (s *Spawner) writeLockedConfig(taskID, workerToken string) (string, error) {
-	cfg := map[string]any{
-		"mcpServers": map[string]any{
-			"agent-protocol": map[string]any{
-				"type":    "http",
-				"url":     s.proxyURL,
-				"headers": map[string]any{"Authorization": "Bearer " + workerToken},
-			},
-		},
-	}
-	data, err := json.Marshal(cfg)
-	if err != nil {
-		return "", err
-	}
-	f, err := os.CreateTemp("", fmt.Sprintf("ap-worker-%s-*.json", taskID))
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	if _, err := f.Write(data); err != nil {
-		return "", err
-	}
-	return f.Name(), nil
 }
 
 // workerPrompt tells the worker how to use its tools.

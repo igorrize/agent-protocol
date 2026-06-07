@@ -3,6 +3,10 @@
 package app
 
 import (
+	"fmt"
+
+	"go.uber.org/automaxprocs/maxprocs"
+
 	"agent-protocol/internal/app/adapters/audit"
 	"agent-protocol/internal/app/adapters/mcp"
 	"agent-protocol/internal/app/adapters/spawn"
@@ -19,6 +23,15 @@ import (
 func Run() error {
 	cfg := config.Load()
 	logger := log.New()
+
+	// Match GOMAXPROCS to the cgroup CPU quota (server path only), routing the
+	// notice through our logger.
+	if _, err := maxprocs.Set(maxprocs.Logger(func(format string, args ...any) {
+		logger.Info(fmt.Sprintf(format, args...))
+	})); err != nil {
+		logger.Error("set maxprocs", "err", err)
+	}
+
 	logger.Info("agent-protocol starting",
 		"port", cfg.Port,
 		"health_port", cfg.HealthPort,
